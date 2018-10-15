@@ -22,3 +22,14 @@ int split_cmd_line(char* line, char** list_to_populate) {
 
    return i;
 }
+
+//
+/*
+int split_line_at_pipes(char* line, char** list_to_populate){
+   char* saveptr;  // for strtok_r; see http://linux.die.net/man/3/strtok_r
+   char* delimiters = " \t\n"; // whitespace
+	
+
+
+}
+*/
