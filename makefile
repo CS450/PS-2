@@ -24,5 +24,5 @@ pipe_demo.o: example/pipe_demo.c
 	$(CC) $(CFLAGS) -g -c -o $@ $<
 
 clean:
-	rm -f *.x *.o *~
+	rm -f *.x *.o *~ *.txt
 
