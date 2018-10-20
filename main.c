@@ -9,27 +9,23 @@
 #include "constants.h"
 #include "parsetools.h"
 
-//void Execute(char** parsedLine, char** cmdList, int numPipes);
-void Execute(char*** cmdList, int numPipes, int* size_of_commands);
-void setup();
-int pipeCount(char** parsedLine, int num_words, char** cmdList);
-void syserror(const char *);
+struct exec_info{
+	char* command_words[MAX_LINE_WORDS + 1];
+};
 
+void Execute(struct exec_info * ParsedCommands, int numCommands);
+void setup();
+void syserror(const char *);
 
 int main() {
 
 	// Buffer for reading one line of input
 	char line[MAX_LINE_CHARS];
-	// holds separated words based on whitespace
-	char* line_words[MAX_LINE_WORDS + 1];
-	char* cmdList[MAX_LINE_WORDS + 1][MAX_LINE_WORDS + 1]; // list of commands
-	int pipes, cmds; //pipe counter, command counter
-	char *singleCommand[MAX_LINE_WORDS +1];
+	//array to store multiple commands
 	char *commands[MAX_LINE_WORDS+1];
-	char cpy[MAX_LINE_CHARS];
-	int size_of_command[MAX_LINE_WORDS+1];
 
 	setup();
+
 	// Loop until user hits Ctrl-D (end of input)
 	// or some other input error occurs
 	while( fgets(line, MAX_LINE_CHARS, stdin) ) {
@@ -39,113 +35,113 @@ int main() {
 			}
 		}
 
-
-		//int num_words = split_cmd_line(line, line_words);
+		//this line will split the command line at pipes if any exist and store the result in 'commands'
 		int num_cmds = split_line_at_pipes(line, commands);	
+		//the below struct is used to store every command in a parsed form
+		struct exec_info parsedCommands[num_cmds];
 
-		//make a copy of commands
-		//char * cmd_words[MAX_LINE_WORDS + 1][MAX_LINE_WORDS +1];
-		char ** cmd_words[MAX_LINE_WORDS + 1];
-		char temp[MAX_LINE_CHARS];
-
-		
-		for(int i = 0; i< num_cmds+1; i ++){
-			cmd_words[i] = malloc(MAX_LINE_CHARS);
-		}
-
-
+		//allocating memory for my struct array
 		for(int i = 0; i < num_cmds; i++){
-			commands[i] = RemoveSpaces(commands[i]);
-			//RemoveSpaces(commands[i]);
-			strcpy(temp, commands[i]);
-			
-			int size = split_cmd_line(temp, cmd_words[i]);
-			size_of_command[i] = size;
-		
-			
-			/*
-			for(int j = 0; j < size; j++){
-				printf("cmd_words %d = %s\n", i, cmd_words[i][j]);
-
+			//for every parsedCommands[i] malloc its corresponding array
+			for(int j = 0; j < MAX_LINE_WORDS +1; j++){
+				parsedCommands[i].command_words[j] = (char *)malloc(MAX_LINE_CHARS * sizeof(char));
 			}
-			*/
-			
-			//printf("cmd_word %d = %s\n", i, cmd_words[i]);
-			//printf("command %d = %s\n", i, commands[i]);
-			//printf("%s\n", line_words[i]);
 		}
 
-		Execute(cmd_words ,num_cmds, size_of_command);
+		int size_of_cmd = 0;
+		for(int i = 0; i< num_cmds; i++){
+			//removing leading and trailing spaces, since we only split at pipes
+			commands[i] = RemoveSpaces(commands[i]);
+			//for every command, split at white spaces and store in the parsedCommands struct array
+			size_of_cmd = split_cmd_line(commands[i], parsedCommands[i].command_words);
+
+			/*
+			printf("command %d = ", i);
+			for(int j = 0; j < size_of_cmd ; j++){
+				printf("%s ", parsedCommands[i].command_words[j]);
+			}
+			printf("\n");
+			*/
+		}
+
+		//will execute the command read in from the command line
+		Execute(parsedCommands ,num_cmds);
 
 	}
 	return 0;
 }
 
-//void Execute(char** parsedLine, char** cmdList, int numPipes){	
-void Execute(char*** cmdList, int numPipes, int* size_of_commands){
-	int pfds[numPipes][2];
+void setup()
+{
+	printf("This is a sameple shell\npress ctrl d to exit\n");
+}
+
+void syserror(const char *s){
+	extern int errno;
+	fprintf(stderr, "%s\n", s);
+	fprintf(stderr, " (%s)\n", strerror(errno));
+	exit(1);
+}
+
+void Execute(struct exec_info* ParsedCommands, int numCommands){
+	int pfds[numCommands][2];
 	int pfd[2];
 	pid_t pid;
+
+	//printf("%s ", parsedCommands[1].command_words[0]);
+
 	//only 1 command
-	if(numPipes == 1){	
+	if(numCommands == 1){	
 		pid = fork();
 
 		if(pid == 0){
-			execvp(cmdList[0][0], cmdList[0]);
+			execvp(ParsedCommands[0].command_words[0], ParsedCommands[0].command_words);
 		}
 		else{
 			wait(NULL);
 		}
 	}
+	//we must have multiple commands with piping
 	else{
-		/*
-		   pid_t *pids;
-		   pids = mmap(0, (pipes+1)*sizeof(pid_t), PROT_READ|PROT_WRITE				, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-		   if(!pids){
-		   perror("mmap failed");
-		   exit(1);
-		   }
-		   memset((void *)pids, 0, (pipes+1)*sizeof(pid_t));
-		   */
+		/*	
+			pid_t *pids;
+			pids = mmap(0, (pipes+1)*sizeof(pid_t), PROT_READ|PROT_WRITE				, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+			if(!pids){
+			perror("mmap failed");
+			exit(1);
+			}
+			memset((void *)pids, 0, (pipes+1)*sizeof(pid_t));
+			*/
 		if(pipe(pfd) == -1){
 			syserror("Could not create a pipe\n");
 		}
-		for(int i = 0; i < numPipes+1; i++){
-			if(i == 0){
-				switch ( pid = fork() ) {
-					case -1: 
-						syserror("fork failed");
-						break;
-					case  0: 
-						if (close(0) == -1)
-							syserror("Could not close stdout");
-						dup(pfd[0]);
-						if (close(pfd[0]) == -1 || close(pfd[1]) == -1)
-							syserror( "Could not close pfds from child" );
-						execvp(cmdList[i][0], cmdList[i]);
-						//execlp("wc", "wc", NULL);
-						syserror("Could not exec");
-						break;
-					default:
-						fprintf(stderr, "in i == numPipes The child's pid is: %d\n", pid);
-						break;
-				}
+		for(int i = 0; i < numCommands; i++){
+			//here we want to close stdin because we want our input to be coming from the pipe
+			if(i == 0){//create the writer process (writing to the pipe)
 				//execute
-			}
-			else if(i == numPipes){
-				//printf("I reached this\n");
 				switch ( pid = fork() ) {
+					printf("inside seecond fork\n");
 					case -1: 
 						syserror("fork failed");
 						break;
-					case  0: 
+					case  0:
 						if (close(1) == -1)
 							syserror("Could not close stdout");
 						dup(pfd[1]);
+
+					/*	
+						if(dup2(pfd[1], 1) == -1){
+						perror("dup2");
+						exit(1);
+						}
+						*/
 						if (close(pfd[0]) == -1 || close(pfd[1]) == -1)
 							syserror( "Could not close pfds from child" );
-						execvp(cmdList[i][0], cmdList[i]);
+						//execvp(cmdList[i][0], cmdList[i]);
+						//printf("this is the command in i==1: %s\n", cmdList[i][0]);
+						//printf("this is the args: %s", cmdList[i]);
 						//execlp("who", "who", NULL);
+						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
 						syserror("Could not exec");
 						break;
 					default:
@@ -153,6 +149,38 @@ void Execute(char*** cmdList, int numPipes, int* size_of_commands){
 						break;
 				}
 
+			}
+			//here we want to close stdout, and change the ouput to go to our pipe
+			else if(i == (numCommands-1)){
+				switch ( pid = fork() ) {
+					printf("inside first fork\n");
+					case -1: 
+						syserror("fork failed");
+						break;
+					case  0:
+						if (close(0) == -1)
+							syserror("Could not close stdout");
+						dup(pfd[0]);
+
+					/*
+					   if(dup2(pfd[0], 0) == -1){
+					   perror("dup2");
+					   exit(1);	
+					   }
+					   */
+
+						if (close(pfd[0]) == -1 || close(pfd[1]) == -1)
+							syserror( "Could not close pfds from child" );
+						//printf("this is the command in i==0: %s\n", cmdList[i][0]);
+						//printf("this is the args: %s", cmdList[i]);
+						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
+					//execlp("wc", "wc", NULL);
+						syserror("Could not exec");
+						break;
+					default:
+						fprintf(stderr, "in i == numCommands The child's pid is: %d\n", pid);
+						break;
+				}
 				//read in from pipe, got to stdout
 			}
 			else{
@@ -161,35 +189,12 @@ void Execute(char*** cmdList, int numPipes, int* size_of_commands){
 			}
 
 		}
+		//we are in the parent process here
+		if (close(pfd[0]) == -1 || close(pfd[1]) == -1)
+			syserror( "Could not close pfds from child" );
+
+		while(wait(NULL) != -1);
+
 	}
-}
 
-void setup()
-{
-	printf("This is a sameple shell\npress ctrl d to exit\n");
-}
-
-int pipeCount(char** parsedLine, int num_words, char** cmdList){
-	int pipes = 0, cmds = 0;
-	for (int i=0; i < num_words; i++) {
-		//printf("%s\n", line_words[i]);
-		const char* tmp = parsedLine[i];
-		if(strcmp(tmp, "|") != 0) { //check if word is not "|"
-			cmdList[pipes][cmds] = parsedLine[i];
-			cmds ++;
-		} else {
-			cmdList[pipes][cmds] = 0;
-			cmds = 0;
-			pipes ++;
-		}
-	}
-	printf("pipes = %d\n", pipes);
-	return pipes;
-}
-
-void syserror(const char *s){
-	extern int errno;
-	fprintf(stderr, "%s\n", s);
-	fprintf(stderr, " (%s)\n", strerror(errno));
-	exit(1);
 }

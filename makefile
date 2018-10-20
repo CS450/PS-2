@@ -1,6 +1,9 @@
 CFLAGS = -Iinclude
 CC = gcc
 
+run: all 
+	./lobo_shell.x
+	
 all: pipe_demo.x lobo_shell.x
 
 # $@ is make shorthand for the thing on the left side of the colon
