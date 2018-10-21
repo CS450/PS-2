@@ -84,12 +84,13 @@ void syserror(const char *s){
 }
 
 void Execute(struct exec_info* ParsedCommands, int numCommands){
-	int pfds[numCommands][2];
-	int pfd[2];
+	int pfds[numCommands-1][2];
 	pid_t pid;
 
-	//printf("%s ", parsedCommands[1].command_words[0]);
-
+	//initialize the pipes
+	for(int i = 0; i < numCommands-1; i++){
+		pipe(pfds[i]);
+	}
 	//only 1 command
 	if(numCommands == 1){	
 		pid = fork();
@@ -112,9 +113,6 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 			}
 			memset((void *)pids, 0, (pipes+1)*sizeof(pid_t));
 			*/
-		if(pipe(pfd) == -1){
-			syserror("Could not create a pipe\n");
-		}
 		for(int i = 0; i < numCommands; i++){
 			//here we want to close stdin because we want our input to be coming from the pipe
 			if(i == 0){//create the writer process (writing to the pipe)
@@ -127,7 +125,7 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 					case  0:
 						if (close(1) == -1)
 							syserror("Could not close stdout");
-						dup(pfd[1]);
+						dup2(pfds[i][1], 1);
 
 					/*	
 						if(dup2(pfd[1], 1) == -1){
@@ -135,8 +133,8 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						exit(1);
 						}
 						*/
-						if (close(pfd[0]) == -1 || close(pfd[1]) == -1)
-							syserror( "Could not close pfds from child" );
+						if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
+							syserror( "Could not close pfds from first command child" );
 						//execvp(cmdList[i][0], cmdList[i]);
 						//printf("this is the command in i==1: %s\n", cmdList[i][0]);
 						//printf("this is the args: %s", cmdList[i]);
@@ -150,7 +148,7 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 				}
 
 			}
-			//here we want to close stdout, and change the ouput to go to our pipe
+			//last command, our output should go to stdout, and input from the previous pipe
 			else if(i == (numCommands-1)){
 				switch ( pid = fork() ) {
 					printf("inside first fork\n");
@@ -158,9 +156,12 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						syserror("fork failed");
 						break;
 					case  0:
+						/*
 						if (close(0) == -1)
 							syserror("Could not close stdout");
-						dup(pfd[0]);
+						*/
+						//input coming from previous pipe
+						dup2(pfds[i-1][0], 0);
 
 					/*
 					   if(dup2(pfd[0], 0) == -1){
@@ -169,8 +170,8 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 					   }
 					   */
 
-						if (close(pfd[0]) == -1 || close(pfd[1]) == -1)
-							syserror( "Could not close pfds from child" );
+						if (close(pfds[i-1][0]) == -1 || close(pfds[i-1][1]) == -1)
+							syserror( "Could not close pfds from last child" );
 						//printf("this is the command in i==0: %s\n", cmdList[i][0]);
 						//printf("this is the args: %s", cmdList[i]);
 						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
@@ -183,17 +184,56 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 				}
 				//read in from pipe, got to stdout
 			}
+			//we are in a command surrounded by two pipes
 			else{
 				//read in from pipe and output to pipe
 				//TODO: for multiple pipes
-			}
+				switch ( pid = fork() ) {
+					//printf("inside first fork\n");
+					case -1: 
+						syserror("fork failed");
+						break;
+					case  0:
+						/*
+						if (close(0) == -1 || close(1) == -1)
+							syserror("error with closing stdout or stdin");
+						*/
+							//dup(pfd[0]);
+						dup2(pfds[i-1][0], 0);
+						dup2(pfds[i][1], 1);
 
+					/*
+					   if(dup2(pfd[0], 0) == -1){
+					   perror("dup2");
+					   exit(1);	
+					   }
+					   */
+
+						if (close(pfds[i-1][0]) == -1 || close(pfds[i-1][1]) == -1)
+							syserror( "Could not close pfds from middle child" );
+						if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
+							syserror( "Could not close pfds from middle child" );
+						//printf("this is the command in i==0: %s\n", cmdList[i][0]);
+						//printf("this is the args: %s", cmdList[i]);
+						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
+					//execlp("wc", "wc", NULL);
+						syserror("Could not exec");
+						break;
+					default:
+						fprintf(stderr, "in the middle command, The child's pid is: %d\n", pid);
+						break;
+				}
+			}
 		}
-		//we are in the parent process here
-		if (close(pfd[0]) == -1 || close(pfd[1]) == -1)
-			syserror( "Could not close pfds from child" );
+		
+		for(int i = 0; i < numCommands-1; i++){
+			if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
+				syserror( "Could not close pfds from parent" );
+		}
+		
 
 		while(wait(NULL) != -1);
+		//we are in the parent process here
 
 	}
 
