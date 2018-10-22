@@ -11,14 +11,15 @@
 
 struct exec_info{
 	char* command_words[MAX_LINE_WORDS + 1];
-    int redirection;
-    char file_name[MAX_LINE_CHARS];
+    	int redirection;
+	char file_name[MAX_LINE_CHARS];
 };
 
 void Parse(char ** commmands, struct exec_info * ParsedCommands, int numCommands);
 void Execute(struct exec_info * ParsedCommands, int numCommands);
 void setup();
 void syserror(const char *);
+void removeQuotes(char * line);
 
 int main() {
 
@@ -32,29 +33,13 @@ int main() {
 	// Loop until user hits Ctrl-D (end of input)
 	// or some other input error occurs
 	while( fgets(line, MAX_LINE_CHARS, stdin) ) {
-		for(int i = 0; line[i] != '\0'; i++){
-			if(line[i] == '\"'){
-				line[i] = ' ';
-			}
-		}
+		removeQuotes(line); //removes any quotes in the line, since exec will not work with them. 
 
-		//this line will split the command line at pipes if any exist and store the result in 'commands'
-		int num_cmds = split_line_at_pipes(line, commands);
-		//printf("num_cmds = %d\n", num_cmds);	
-		//the below struct is used to store every command in a parsed form
-		struct exec_info parsedCommands[num_cmds];
-
-		//allocating memory for my struct array
-		for(int i = 0; i < num_cmds; i++){
-			//for every parsedCommands[i] malloc its corresponding array
-			for(int j = 0; j < MAX_LINE_WORDS +1; j++){
-				parsedCommands[i].command_words[j] = (char *)malloc(MAX_LINE_CHARS * sizeof(char));
-			}
-			parsedCommands[i].redirection = 0;
-		}
+		int num_cmds = split_line_at_pipes(line, commands);//splits the command line where there is a pipe and stores the (parsed) result in 'commands'
 		
-		//parse commands then execute
-		Parse(commands, parsedCommands, num_cmds);
+		struct exec_info parsedCommands[num_cmds];//this struct stores all of the commands in a parsed form. 
+		
+		Parse(commands, parsedCommands, num_cmds);//parse the commands and then execute
 	}
 	return 0;
 }
@@ -81,6 +66,11 @@ void syserror(const char *s){
 void Parse(char ** commands, struct exec_info* ParsedCommands, int numCommands){
 	int size_of_cmd = 0;
 	for(int i = 0; i< numCommands; i++){
+		//allocating memory for my struct array
+		for(int j = 0; j < MAX_LINE_WORDS +1; j++){
+			ParsedCommands[i].command_words[j] = (char *)malloc(MAX_LINE_CHARS * sizeof(char));
+		}
+		ParsedCommands[i].redirection = 0;
 		//removing leading and trailing spaces, since we only split at pipes
 		commands[i] = RemoveSpaces(commands[i]);
 		//for every command, split at white spaces and store in the parsedCommands struct array
@@ -121,9 +111,9 @@ void Parse(char ** commands, struct exec_info* ParsedCommands, int numCommands){
 					ParsedCommands[i].command_words[j+1] = '\0';
 				}
 			}
+	}
 	//will execute the command read in from the command line
 	Execute(ParsedCommands, numCommands);
-	}
 }
 
 
@@ -197,7 +187,7 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 							syserror( "Could not close pfds from first command child" );
 						
 						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
-						syserror("Could not exec");
+						syserror("Could not exec the first command");
 						break;
 					default:
 						//fprintf(stderr, "when i == 0 The child's pid is: %d\n", pid);
@@ -239,7 +229,7 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 							syserror( "Could not close pfds from last child i-1" );
 						
 						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
-						syserror("Could not exec");
+						syserror("Could not exec the last command");
 						break;
 					default:
 						//fprintf(stderr, "in i == numCommands The child's pid is: %d\n", pid);
@@ -283,6 +273,14 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 				syserror( "Could not close pfds from parent" );
 		}
 		while(wait(NULL) != -1);
+	}
+}
+
+void removeQuotes(char * line){
+	for(int i = 0; line[i] != '\0'; i++){
+		if(line[i] == '\"' || line[i] == '\''){
+			line[i] = ' ';
+		}
 	}
 }
 
