@@ -12,6 +12,7 @@
 struct exec_info{
 	char* command_words[MAX_LINE_WORDS + 1];
     int redirection;
+    char file_name[MAX_LINE_CHARS];
 };
 
 void Execute(struct exec_info * ParsedCommands, int numCommands);
@@ -37,7 +38,8 @@ int main() {
 		}
 
 		//this line will split the command line at pipes if any exist and store the result in 'commands'
-		int num_cmds = split_line_at_pipes(line, commands);	
+		int num_cmds = split_line_at_pipes(line, commands);
+		//printf("num_cmds = %d\n", num_cmds);	
 		//the below struct is used to store every command in a parsed form
 		struct exec_info parsedCommands[num_cmds];
 
@@ -47,6 +49,7 @@ int main() {
 			for(int j = 0; j < MAX_LINE_WORDS +1; j++){
 				parsedCommands[i].command_words[j] = (char *)malloc(MAX_LINE_CHARS * sizeof(char));
 			}
+			parsedCommands[i].redirection = 0;
 		}
 
 		int size_of_cmd = 0;
@@ -56,28 +59,62 @@ int main() {
 			//for every command, split at white spaces and store in the parsedCommands struct array
 			size_of_cmd = split_cmd_line(commands[i], parsedCommands[i].command_words);
 
-			/*
-			printf("command %d = ", i);
-			for(int j = 0; j < size_of_cmd ; j++){
-				printf("%s ", parsedCommands[i].command_words[j]);
+	        	for (int j = 0; j < size_of_cmd ; j++){
+				//strcmp returns 0 if the two strings are equal
+				if(!strcmp(parsedCommands[i].command_words[j], ">")){
+					//printf("we are in > or >> \n");	
+					parsedCommands[i].redirection = 1;
+
+					//TODO: error check strcpy 
+					strcpy(parsedCommands[i].file_name,parsedCommands[i].command_words[j+1]); 
+					
+					size_of_cmd -= 2;	
+					parsedCommands[i].command_words[j] = '\0';
+					parsedCommands[i].command_words[j+1] = '\0';
+				} 
+				else if(!strcmp(parsedCommands[i].command_words[j], ">>")){
+					parsedCommands[i].redirection = 2;
+
+					//TODO: error check strcpy 
+					strcpy(parsedCommands[i].file_name,parsedCommands[i].command_words[j+1]); 
+					
+					size_of_cmd -= 2;	
+					parsedCommands[i].command_words[j] = '\0';
+					parsedCommands[i].command_words[j+1] = '\0';
+					
+				}
+				else if(!strcmp(parsedCommands[i].command_words[j], "<")){
+                    			parsedCommands[i].redirection = 3;
+					
+					//TODO: error check strcpy 
+					strcpy(parsedCommands[i].file_name,parsedCommands[i].command_words[j+1]); 
+			
+					size_of_cmd -= 2;
+					parsedCommands[i].command_words[j] = '\0';
+					parsedCommands[i].command_words[j+1] = '\0';
+                		}
+			}
+
+				/*	
+			//testing
+			printf("redirection = %d\n", parsedCommands[i].redirection);
+			if(parsedCommands[i].redirection){
+				printf("file name = %s\n", parsedCommands[i].file_name);
+			}
+			printf("command =\n");
+	        	for (int j = 0; j < size_of_cmd ; j++){
+				//if(strcmp(parsedCommands[i].command_words[j], '\0'))
+					//break;
+				printf("%s\n", parsedCommands[i].command_words[j]);
+				//if(parsedCommands[i].command_words[j][0] == '<')
+				//if(!strcmp(parsedCommands[i].command_words[j], "<"))
+				//	printf("%s ", parsedCommands[i].command_words[j]);
 			}
 			printf("\n");
 			*/
-	        for (int j = 0; j < size_of_cmd ; j++){
-                if (parsedCommands[i].command_words[j] == ">"){
-                    if (parsedCommands[i+1].command_words[j] == ">" ) {
-                       parsedCommands[i+2].redirection = 3;
-                       parsedCommands[i+1].command_words[j] = '\0';
-                    } else {
-                        parsedCommands[i+1].redirection = 1;
-                    }
-                    parsedCommands[i].command_words[j] = '\0';
-                } else if (parsedCommands[i].command_words[j] == "<") {
-                    parsedCommands[i+1].redirection = 2;
-                    parsedCommands[i].command_words[j] = '\0';
-                }
-            }
-        }
+				
+        	}
+		
 
 		//will execute the command read in from the command line
 		Execute(parsedCommands ,num_cmds);
@@ -97,38 +134,53 @@ void syserror(const char *s){
 	fprintf(stderr, " (%s)\n", strerror(errno));
 	exit(1);
 }
-
 void Execute(struct exec_info* ParsedCommands, int numCommands){
 	int pfds[numCommands-1][2];
 	pid_t pid;
+	int save_stdout;
 	//initialize the pipes
-	for(int i = 0; i < numCommands-1; i++){
+	for(int i = 0; i < numCommands; i++){
 		pipe(pfds[i]);
 	}
+	printf("num cmds = %d\n", numCommands);
+	
 	//only 1 command
 	if(numCommands == 1){	
 		pid = fork();
 
 		if(pid == 0){
+			//redireting output
+			if(ParsedCommands[0].redirection){
+				//save stdout?
+				fflush(stdout);
+				save_stdout = dup(1);
+
+				//TODO: error check on open
+				if(ParsedCommands[0].redirection == 1){
+					pfds[0][1] = open(ParsedCommands[0].file_name, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+				}
+				else if(ParsedCommands[0].redirection == 2){
+					pfds[0][1] = open(ParsedCommands[0].file_name, O_WRONLY | O_APPEND, 0777);
+				}
+				dup2(pfds[0][1], 1);
+				if (close(pfds[0][0]) == -1 || close(pfds[0][1]) == -1)
+					syserror( "Could not close pfds" );
+			}
 			execvp(ParsedCommands[0].command_words[0], ParsedCommands[0].command_words);
 		}
 		else{
-			wait(NULL);
+			if(ParsedCommands[0].redirection == 1){
+				//restore stdout
+				fflush(stdout);
+				dup2(save_stdout, 1);
+				close(save_stdout);
+			}
+			//wait(NULL);
 		}
 	}
 	//we must have multiple commands with piping
 	else{
-		/*	
-			pid_t *pids;
-			pids = mmap(0, (pipes+1)*sizeof(pid_t), PROT_READ|PROT_WRITE				, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-			if(!pids){
-			perror("mmap failed");
-			exit(1);
-			}
-			memset((void *)pids, 0, (pipes+1)*sizeof(pid_t));
-			*/
 		for(int i = 0; i < numCommands; i++){
-			//here we want to close stdin because we want our input to be coming from the pipe
 			if(i == 0){//create the writer process (writing to the pipe)
 				//execute
 				switch ( pid = fork() ) {
@@ -147,12 +199,10 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						exit(1);
 						}
 						*/
+
 						if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
 							syserror( "Could not close pfds from first command child" );
-						//execvp(cmdList[i][0], cmdList[i]);
-						//printf("this is the command in i==1: %s\n", cmdList[i][0]);
-						//printf("this is the args: %s", cmdList[i]);
-						//execlp("who", "who", NULL);
+						
 						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
 						syserror("Could not exec");
 						break;
@@ -164,19 +214,32 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 			}
 			//last command, our output should go to stdout, and input from the previous pipe
 			else if(i == (numCommands-1)){
-				if(ParsedCommands[i].redirection == 0){
-                    switch ( pid = fork() ) {
-					    printf("inside first fork\n");
-					    case -1: 
-						    syserror("fork failed");
-						    break;
-					    case  0:
-						    /*
-						    if (close(0) == -1)
-							syserror("Could not close stdout");
-						    */
-						    //input coming from previous pipe
-						    dup2(pfds[i-1][0], 0);
+				//if(ParsedCommands[i].redirection == 0){
+                    		switch ( pid = fork() ) {
+					printf("inside first fork\n");
+					case -1: 
+						syserror("fork failed");
+						break;
+					case  0:
+						//here we are getting input from pipe	
+						dup2(pfds[i-1][0], 0);
+
+						//if below is true we are sending the output to a file
+						if(ParsedCommands[i].redirection){
+							//save stdout?
+							fflush(stdout);
+							save_stdout = dup(1);
+							//TODO: error check on open
+							if(ParsedCommands[0].redirection == 1){
+								pfds[i][1] = open(ParsedCommands[0].file_name, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+							}
+							else if(ParsedCommands[0].redirection == 2){
+								pfds[i][1] = open(ParsedCommands[0].file_name, O_WRONLY | O_APPEND, 0777);
+							}
+							dup2(pfds[i][1], 1);
+							if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
+								syserror( "Could not close pfds from last child for pfd[i][0] or 1" );
+						}
 
 					        /*
 					        if(dup2(pfd[0], 0) == -1){
@@ -185,37 +248,19 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 					        }
 					        */
 
-						    if (close(pfds[i-1][0]) == -1 || close(pfds[i-1][1]) == -1)
-							    syserror( "Could not close pfds from last child" );
-						    //printf("this is the command in i==0: %s\n", cmdList[i][0]);
-						    //printf("this is the args: %s", cmdList[i]);
-						    execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
-					        //execlp("wc", "wc", NULL);
-						    syserror("Could not exec");
-						    break;
-					    default:
-						    //fprintf(stderr, "in i == numCommands The child's pid is: %d\n", pid);
-						    break;
-				        }
-
-                } else {
-                    int tin = dup(0);
-                    int tout = dup(1);
-                     
-                    if (ParsedCommands[i].redirection = 1) {
-                        int fdout = open(ParsedCommands[i].command_words[0], O_CREAT );
-                    } else if(ParsedCommands[i].redirection = 3){
-                        int fdout = open(ParsedCommands[i].command_words[0], O_APPEND ); 
-                    } else {
-                        //not sure what to do here?
-                        int x = 0;
-                        //int fdin = open(ParsedCommands[i].command_words[0], O_READ); 
-                    }
-                
-				//read in from pipe, got to stdout
-			    }
+						if (close(pfds[i-1][0]) == -1 || close(pfds[i-1][1]) == -1)
+							syserror( "Could not close pfds from last child i-1" );
+						
+						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
+						syserror("Could not exec");
+						break;
+					default:
+						//fprintf(stderr, "in i == numCommands The child's pid is: %d\n", pid);
+						break;
+				}
+			}
 			//we are in a command surrounded by two pipes
-            } else{
+			else{
 				//read in from pipe and output to pipe
 				//TODO: for multiple pipes
 				switch ( pid = fork() ) {
@@ -224,11 +269,6 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						syserror("fork failed");
 						break;
 					case  0:
-						/*
-						if (close(0) == -1 || close(1) == -1)
-							syserror("error with closing stdout or stdin");
-						*/
-							//dup(pfd[0]);
 						dup2(pfds[i-1][0], 0);
 						dup2(pfds[i][1], 1);
 
@@ -243,28 +283,31 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 							syserror( "Could not close pfds from middle child" );
 						if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
 							syserror( "Could not close pfds from middle child" );
-						//printf("this is the command in i==0: %s\n", cmdList[i][0]);
-						//printf("this is the args: %s", cmdList[i]);
 						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
-					//execlp("wc", "wc", NULL);
 						syserror("Could not exec");
 						break;
 					default:
-					//	fprintf(stderr, "in the middle command, The child's pid is: %d\n", pid);
+						fprintf(stderr, "in the middle command, The child's pid is: %d\n", pid);
 						break;
 				}
 			}
-		}
+			if(ParsedCommands[0].redirection == 1){
+				//restore stdout
+				fflush(stdout);
+				dup2(save_stdout, 1);
+				close(save_stdout);
+			}
+		} 
+
 		
 		for(int i = 0; i < numCommands-1; i++){
 			if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
 				syserror( "Could not close pfds from parent" );
 		}
 		
-
 		while(wait(NULL) != -1);
-		//we are in the parent process here
-
 	}
 
 }
+
+
