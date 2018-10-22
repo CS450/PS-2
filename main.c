@@ -15,6 +15,7 @@ struct exec_info{
     char file_name[MAX_LINE_CHARS];
 };
 
+void Parse(char ** commmands, struct exec_info * ParsedCommands, int numCommands);
 void Execute(struct exec_info * ParsedCommands, int numCommands);
 void setup();
 void syserror(const char *);
@@ -51,82 +52,22 @@ int main() {
 			}
 			parsedCommands[i].redirection = 0;
 		}
-
-		int size_of_cmd = 0;
-		for(int i = 0; i< num_cmds; i++){
-			//removing leading and trailing spaces, since we only split at pipes
-			commands[i] = RemoveSpaces(commands[i]);
-			//for every command, split at white spaces and store in the parsedCommands struct array
-			size_of_cmd = split_cmd_line(commands[i], parsedCommands[i].command_words);
-
-	        	for (int j = 0; j < size_of_cmd ; j++){
-				//strcmp returns 0 if the two strings are equal
-				if(!strcmp(parsedCommands[i].command_words[j], ">")){
-					//printf("we are in > or >> \n");	
-					parsedCommands[i].redirection = 1;
-
-					//TODO: error check strcpy 
-					strcpy(parsedCommands[i].file_name,parsedCommands[i].command_words[j+1]); 
-					
-					size_of_cmd -= 2;	
-					parsedCommands[i].command_words[j] = '\0';
-					parsedCommands[i].command_words[j+1] = '\0';
-				} 
-				else if(!strcmp(parsedCommands[i].command_words[j], ">>")){
-					parsedCommands[i].redirection = 2;
-
-					//TODO: error check strcpy 
-					strcpy(parsedCommands[i].file_name,parsedCommands[i].command_words[j+1]); 
-					
-					size_of_cmd -= 2;	
-					parsedCommands[i].command_words[j] = '\0';
-					parsedCommands[i].command_words[j+1] = '\0';
-					
-				}
-				else if(!strcmp(parsedCommands[i].command_words[j], "<")){
-                    			parsedCommands[i].redirection = 3;
-					
-					//TODO: error check strcpy 
-					strcpy(parsedCommands[i].file_name,parsedCommands[i].command_words[j+1]); 
-			
-					size_of_cmd -= 2;
-					parsedCommands[i].command_words[j] = '\0';
-					parsedCommands[i].command_words[j+1] = '\0';
-                		}
-			}
-
-				/*	
-			//testing
-			printf("redirection = %d\n", parsedCommands[i].redirection);
-			if(parsedCommands[i].redirection){
-				printf("file name = %s\n", parsedCommands[i].file_name);
-			}
-			printf("command =\n");
-	        	for (int j = 0; j < size_of_cmd ; j++){
-				//if(strcmp(parsedCommands[i].command_words[j], '\0'))
-					//break;
-				printf("%s\n", parsedCommands[i].command_words[j]);
-				//if(parsedCommands[i].command_words[j][0] == '<')
-				//if(!strcmp(parsedCommands[i].command_words[j], "<"))
-				//	printf("%s ", parsedCommands[i].command_words[j]);
-			}
-			printf("\n");
-			*/
-				
-        	}
 		
-
-		//will execute the command read in from the command line
-		Execute(parsedCommands ,num_cmds);
-
+		//parse commands then execute
+		Parse(commands, parsedCommands, num_cmds);
 	}
 	return 0;
 }
+
+
+
 
 void setup()
 {
 	printf("This is a simple shell\npress ctrl d to exit\n");
 }
+
+
 
 void syserror(const char *s){
 	extern int errno;
@@ -134,6 +75,58 @@ void syserror(const char *s){
 	fprintf(stderr, " (%s)\n", strerror(errno));
 	exit(1);
 }
+
+
+
+void Parse(char ** commands, struct exec_info* ParsedCommands, int numCommands){
+	int size_of_cmd = 0;
+	for(int i = 0; i< numCommands; i++){
+		//removing leading and trailing spaces, since we only split at pipes
+		commands[i] = RemoveSpaces(commands[i]);
+		//for every command, split at white spaces and store in the parsedCommands struct array
+		size_of_cmd = split_cmd_line(commands[i], ParsedCommands[i].command_words);
+
+			for (int j = 0; j < size_of_cmd ; j++){
+			//strcmp returns 0 if the two strings are equal
+			if(!strcmp(ParsedCommands[i].command_words[j], ">")){
+				//printf("we are in > or >> \n");	
+				ParsedCommands[i].redirection = 1;
+
+				//TODO: error check strcpy 
+				strcpy(ParsedCommands[i].file_name, ParsedCommands[i].command_words[j+1]); 
+				
+				size_of_cmd -= 2;	
+				ParsedCommands[i].command_words[j] = '\0';
+				ParsedCommands[i].command_words[j+1] = '\0';
+			} 
+			else if(!strcmp(ParsedCommands[i].command_words[j], ">>")){
+				ParsedCommands[i].redirection = 2;
+
+				//TODO: error check strcpy 
+				strcpy(ParsedCommands[i].file_name, ParsedCommands[i].command_words[j+1]); 
+				
+				size_of_cmd -= 2;	
+				ParsedCommands[i].command_words[j] = '\0';
+				ParsedCommands[i].command_words[j+1] = '\0';
+				
+			}
+			else if(!strcmp(ParsedCommands[i].command_words[j], "<")){
+					ParsedCommands[i].redirection = 3;
+				
+				//TODO: error check strcpy 
+					strcpy(ParsedCommands[i].file_name, ParsedCommands[i].command_words[j+1]); 
+			
+					size_of_cmd -= 2;
+					ParsedCommands[i].command_words[j] = '\0';
+					ParsedCommands[i].command_words[j+1] = '\0';
+				}
+			}
+	//will execute the command read in from the command line
+	Execute(ParsedCommands, numCommands);
+	}
+}
+
+
 void Execute(struct exec_info* ParsedCommands, int numCommands){
 	int pfds[numCommands-1][2];
 	pid_t pid;
@@ -241,12 +234,6 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 								syserror( "Could not close pfds from last child for pfd[i][0] or 1" );
 						}
 
-					        /*
-					        if(dup2(pfd[0], 0) == -1){
-					        perror("dup2");
-					        exit(1);	
-					        }
-					        */
 
 						if (close(pfds[i-1][0]) == -1 || close(pfds[i-1][1]) == -1)
 							syserror( "Could not close pfds from last child i-1" );
@@ -259,8 +246,8 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						break;
 				}
 			}
-			//we are in a command surrounded by two pipes
 			else{
+				//we are in a command surrounded by two pipes
 				//read in from pipe and output to pipe
 				//TODO: for multiple pipes
 				switch ( pid = fork() ) {
@@ -271,14 +258,6 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 					case  0:
 						dup2(pfds[i-1][0], 0);
 						dup2(pfds[i][1], 1);
-
-					/*
-					   if(dup2(pfd[0], 0) == -1){
-					   perror("dup2");
-					   exit(1);	
-					   }
-					   */
-
 						if (close(pfds[i-1][0]) == -1 || close(pfds[i-1][1]) == -1)
 							syserror( "Could not close pfds from middle child" );
 						if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
@@ -299,15 +278,11 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 			}
 		} 
 
-		
 		for(int i = 0; i < numCommands-1; i++){
 			if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
 				syserror( "Could not close pfds from parent" );
 		}
-		
 		while(wait(NULL) != -1);
 	}
-
 }
-
 
