@@ -63,21 +63,7 @@ int main() {
 			}
 			printf("\n");
 			*/
-	        for (int j = 0; j < size_of_cmd ; j++){
-                if (parsedCommands[i].command_words[j] == ">"){
-                    if (parsedCommands[i+1].command_words[j] == ">" ) {
-                       parsedCommands[i+2].redirection = 3;
-                       parsedCommands[i+1].command_words[j] = '\0';
-                    } else {
-                        parsedCommands[i+1].redirection = 1;
-                    }
-                    parsedCommands[i].command_words[j] = '\0';
-                } else if (parsedCommands[i].command_words[j] == "<") {
-                    parsedCommands[i+1].redirection = 2;
-                    parsedCommands[i].command_words[j] = '\0';
-                }
-            }
-        }
+		}
 
 		//will execute the command read in from the command line
 		Execute(parsedCommands ,num_cmds);
@@ -101,6 +87,10 @@ void syserror(const char *s){
 void Execute(struct exec_info* ParsedCommands, int numCommands){
 	int pfds[numCommands-1][2];
 	pid_t pid;
+    for (int j = 0; j < size_of_cmd; j++){
+        if (parsedCommands[i].command_words[j] == ">" );
+            redirection = 1;
+    }
 	//initialize the pipes
 	for(int i = 0; i < numCommands-1; i++){
 		pipe(pfds[i]);
@@ -164,58 +154,42 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 			}
 			//last command, our output should go to stdout, and input from the previous pipe
 			else if(i == (numCommands-1)){
-				if(ParsedCommands[i].redirection == 0){
-                    switch ( pid = fork() ) {
-					    printf("inside first fork\n");
-					    case -1: 
-						    syserror("fork failed");
-						    break;
-					    case  0:
-						    /*
-						    if (close(0) == -1)
+				switch ( pid = fork() ) {
+					printf("inside first fork\n");
+					case -1: 
+						syserror("fork failed");
+						break;
+					case  0:
+						/*
+						if (close(0) == -1)
 							syserror("Could not close stdout");
-						    */
-						    //input coming from previous pipe
-						    dup2(pfds[i-1][0], 0);
+						*/
+						//input coming from previous pipe
+						dup2(pfds[i-1][0], 0);
 
-					        /*
-					        if(dup2(pfd[0], 0) == -1){
-					        perror("dup2");
-					        exit(1);	
-					        }
-					        */
+					/*
+					   if(dup2(pfd[0], 0) == -1){
+					   perror("dup2");
+					   exit(1);	
+					   }
+					   */
 
-						    if (close(pfds[i-1][0]) == -1 || close(pfds[i-1][1]) == -1)
-							    syserror( "Could not close pfds from last child" );
-						    //printf("this is the command in i==0: %s\n", cmdList[i][0]);
-						    //printf("this is the args: %s", cmdList[i]);
-						    execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
-					        //execlp("wc", "wc", NULL);
-						    syserror("Could not exec");
-						    break;
-					    default:
-						    //fprintf(stderr, "in i == numCommands The child's pid is: %d\n", pid);
-						    break;
-				        }
-
-                } else {
-                    int tin = dup(0);
-                    int tout = dup(1);
-                     
-                    if (ParsedCommands[i].redirection = 1) {
-                        int fdout = open(ParsedCommands[i].command_words[0], O_CREAT );
-                    } else if(ParsedCommands[i].redirection = 3){
-                        int fdout = open(ParsedCommands[i].command_words[0], O_APPEND ); 
-                    } else {
-                        //not sure what to do here?
-                        int x = 0;
-                        //int fdin = open(ParsedCommands[i].command_words[0], O_READ); 
-                    }
-                
+						if (close(pfds[i-1][0]) == -1 || close(pfds[i-1][1]) == -1)
+							syserror( "Could not close pfds from last child" );
+						//printf("this is the command in i==0: %s\n", cmdList[i][0]);
+						//printf("this is the args: %s", cmdList[i]);
+						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
+					//execlp("wc", "wc", NULL);
+						syserror("Could not exec");
+						break;
+					default:
+						//fprintf(stderr, "in i == numCommands The child's pid is: %d\n", pid);
+						break;
+				}
 				//read in from pipe, got to stdout
-			    }
+			}
 			//we are in a command surrounded by two pipes
-            } else{
+			else{
 				//read in from pipe and output to pipe
 				//TODO: for multiple pipes
 				switch ( pid = fork() ) {
@@ -250,7 +224,7 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						syserror("Could not exec");
 						break;
 					default:
-					//	fprintf(stderr, "in the middle command, The child's pid is: %d\n", pid);
+						fprintf(stderr, "in the middle command, The child's pid is: %d\n", pid);
 						break;
 				}
 			}
