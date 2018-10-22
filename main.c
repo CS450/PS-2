@@ -230,11 +230,11 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 							fflush(stdout);
 							save_stdout = dup(1);
 							//TODO: error check on open
-							if(ParsedCommands[0].redirection == 1){
-								pfds[i][1] = open(ParsedCommands[0].file_name, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+							if(ParsedCommands[i].redirection == 1){
+								pfds[i][1] = open(ParsedCommands[i].file_name, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 							}
-							else if(ParsedCommands[0].redirection == 2){
-								pfds[i][1] = open(ParsedCommands[0].file_name, O_WRONLY | O_APPEND, 0777);
+							else if(ParsedCommands[i].redirection == 2){
+								pfds[i][1] = open(ParsedCommands[i].file_name, O_WRONLY | O_APPEND, 0777);
 							}
 							dup2(pfds[i][1], 1);
 							if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
