@@ -202,7 +202,7 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 					dup2(pfds[0][1], 1);
 				}
 				*/
-				
+				printf("no\n");
 				if (close(pfds[0][0]) == -1 || close(pfds[0][1]) == -1)
 					syserror( "Could not close pfds from here" );
 			}
@@ -214,6 +214,7 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 				//restore stdout
 				fflush(stdout);
 				dup2(save_std_out, 1);
+				printf("no\n");
 				close(save_std_out);
 			}
 			if(ParsedCommands[0].in_redirect){
@@ -229,6 +230,7 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 	//we must have multiple commands with piping
 	else{
 		for(int i = 0; i < numCommands; i++){
+			//printf("command # = %d\n", i);
 			if(i == 0){//create the writer process (writing to the pipe)
 				if(ParsedCommands[i].out_redirect){
 					syserror("cannot redirect output when there is a following pipe");
@@ -269,6 +271,14 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						//fprintf(stderr, "when i == 0 The child's pid is: %d\n", pid);
 						break;
 				}
+				/*
+				if(ParsedCommands[i].in_redirect){
+					//restore stdin
+					fflush(stdin);
+					dup2(save_std_in, 0);
+					close(save_std_in);
+				}
+				*/
 
 			}
 			//last command, our output should go to stdout, and input from the previous pipe
@@ -313,6 +323,14 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						//fprintf(stderr, "in i == numCommands The child's pid is: %d\n", pid);
 						break;
 				}
+				/*
+				if(ParsedCommands[i].out_redirect){
+				//restore stdout
+				fflush(stdout);
+				dup2(save_std_out, 1);
+				close(save_std_out);
+				}
+				*/
 			}
 			else{
 				//we are in a command surrounded by two pipes
@@ -327,9 +345,11 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						dup2(pfds[i-1][0], 0);
 						dup2(pfds[i][1], 1);
 						if (close(pfds[i-1][0]) == -1 || close(pfds[i-1][1]) == -1)
-							syserror( "Could not close pfds from middle child" );
+							syserror( "Could not close pfds from i-1  middle child" );
+						/*
 						if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
 							syserror( "Could not close pfds from middle child" );
+						*/
 						execvp(ParsedCommands[i].command_words[0], ParsedCommands[i].command_words);
 						syserror("Could not exec");
 						break;
@@ -338,26 +358,39 @@ void Execute(struct exec_info* ParsedCommands, int numCommands){
 						break;
 				}
 			}
-			if(ParsedCommands[i].out_redirect){
-				//restore stdout
-				fflush(stdout);
-				dup2(save_std_out, 1);
-				close(save_std_out);
-			}
-			if(ParsedCommands[i].in_redirect){
-				//restore stdin
-				fflush(stdin);
-				dup2(save_std_in, 0);
-				close(save_std_in);
-			}
-		} 
-		
-		for(int i = 0; i < numCommands-1; i++){
+			/*
+			*/
+			//for(int i = 0; i < numCommands-1; i++){
+			/*
 			if (close(pfds[i][0]) == -1 || close(pfds[i][1]) == -1)
+				printf("i = %d\n", i);
 				syserror( "Could not close pfds from parent" );
+			*/
+
+			//in parent
+			if(i>0){
+				if(close(pfds[i-1][0]) == -1){
+					syserror("parent could not close stdin");
+				}
+				if(close(pfds[i-1][1]) == -1){
+					syserror("parent could not close stdout");
+				}
+			}
+			while(wait(NULL) != -1);
 		}
+	       /*	
+		for(int i = 0; i < numCommands; i++){
+			if(close(pfds[i][0]) == -1){
+				syserror("parent could not close stdin");
+			}
+			if(close(pfds[i][1]) == -1){
+				printf("when i = %d\n", i);
+				syserror("parent could not close stdout");
+			}
+		}
+		*/
+		
 	}
-	while(wait(NULL) != -1);
 }
 
 void removeQuotes(char * line){
